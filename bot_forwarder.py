@@ -23,9 +23,10 @@ PROGRESS_FILE = Path("progress.json")
 is_running = False
 interval_minutes = INTERVAL_MINUTES
 start_from_id = START_FROM_ID
+last_sent_id = 0
 
 
-# === Simpan dan baca progress ===
+# === Fungsi simpan & baca progress ===
 def load_progress() -> int:
     if PROGRESS_FILE.exists():
         try:
@@ -61,13 +62,19 @@ def update_env_var(key: str, value):
 
 # === Fungsi forward pesan satu per satu ===
 async def forward_sequential(client: TelegramClient, source, target):
-    global is_running, interval_minutes, start_from_id
+    global is_running, interval_minutes, start_from_id, last_sent_id
 
-    last_id = load_progress()
-    min_id = max(last_id, start_from_id)
-    newest_id = min_id
+    last_saved = load_progress()
+    # Jika ada perubahan START_FROM_ID (lebih besar atau berbeda dari progress lama)
+    if start_from_id != 0 and start_from_id != last_saved:
+        current_id = start_from_id
+        save_progress(start_from_id)
+    else:
+        current_id = last_saved + 1 if last_saved > 0 else start_from_id
 
-    async for msg in client.iter_messages(source, reverse=True, min_id=min_id):
+    print(f"▶️ Mulai forward dari ID: {current_id}")
+
+    async for msg in client.iter_messages(source, reverse=True, min_id=current_id - 1):
         if not is_running:
             print("⏸️ Forward dihentikan.")
             break
@@ -75,8 +82,8 @@ async def forward_sequential(client: TelegramClient, source, target):
             continue
         try:
             await client.forward_messages(entity=target, messages=msg)
-            newest_id = msg.id
-            save_progress(newest_id)
+            last_sent_id = msg.id
+            save_progress(last_sent_id)
             print(f"✅ Forwarded ID {msg.id}. Tunggu {interval_minutes} menit...")
             await asyncio.sleep(interval_minutes * 60)
         except Exception as e:
@@ -87,7 +94,7 @@ async def forward_sequential(client: TelegramClient, source, target):
 
 # === Fungsi utama ===
 async def main():
-    global is_running, interval_minutes, start_from_id
+    global is_running, interval_minutes, start_from_id, last_sent_id
 
     client = TelegramClient("session_bot_forwarder", API_ID, API_HASH)
     await client.start()
@@ -96,17 +103,17 @@ async def main():
     target = await client.get_entity(TARGET_CHANNEL)
 
     print("=" * 60)
-    print("🚀 BOT FORWARDER (AKUN USER MODE + CMD) AKTIF")
+    print("🚀 BOT FORWARDER (USER MODE + SMART START) AKTIF")
     print(f"📤 Sumber : {SOURCE_CHANNEL}")
     print(f"📥 Tujuan : {TARGET_CHANNEL}")
-    print(f"▶️ Mulai dari ID : {max(start_from_id, load_progress())}")
+    print(f"▶️ Start ID : {start_from_id}")
     print(f"⏱️ Interval : {interval_minutes} menit antar postingan")
     print("=" * 60)
 
-    # === Command Handler ===
+    # === Handler command ===
     @client.on(events.NewMessage(from_users=OWNER_ID))
     async def command_handler(event):
-        global is_running, interval_minutes, start_from_id
+        global is_running, interval_minutes, start_from_id, last_sent_id
 
         cmd = event.raw_text.strip().lower()
         args = cmd.split()
@@ -139,25 +146,19 @@ async def main():
                 new_start = int(args[2])
                 start_from_id = new_start
                 update_env_var("START_FROM_ID", new_start)
-
-                # Hapus progress lama biar mulai dari titik baru
-                if PROGRESS_FILE.exists():
-                    PROGRESS_FILE.unlink()
-
-                # Simpan progress baru sebagai start point
                 save_progress(start_from_id)
-
-                await event.reply(f"✅ START_FROM_ID diubah menjadi {new_start} dan progress direset.")
+                await event.reply(f"✅ START_FROM_ID diubah ke {new_start}. Akan mulai dari sana saat /on dijalankan.")
             else:
                 await event.reply("⚙️ Format salah.\nGunakan:\n/setting <menit>\n/setting start <id>")
 
         elif cmd == "/status":
             status = "🟢 Aktif" if is_running else "🔴 Nonaktif"
+            last_id = load_progress()
             await event.reply(
                 f"📊 Status: {status}\n"
                 f"⏱️ Interval: {interval_minutes} menit\n"
                 f"▶️ Start From ID: {start_from_id}\n"
-                f"📨 Last ID: {load_progress()}"
+                f"📨 Last ID: {last_id}"
             )
 
         else:
