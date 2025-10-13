@@ -73,8 +73,20 @@ async def forward_sequential(client: TelegramClient, source, target):
 
     print(f"▶️ Mulai forward dari ID: {current_id}")
 
-    # Ambil pesan mulai dari current_id (termasuk dirinya sendiri)
-    async for msg in client.iter_messages(source, reverse=True, offset_id=current_id - 1):
+    # --- Kirim dulu pesan start_from_id itu sendiri ---
+    try:
+        msg = await client.get_messages(source, ids=current_id)
+        if msg and is_running:
+            await client.forward_messages(entity=target, messages=msg)
+            last_sent_id = msg.id
+            save_progress(last_sent_id)
+            print(f"✅ Forwarded ID {msg.id}. Tunggu {interval_minutes} menit...")
+            await asyncio.sleep(interval_minutes * 60)
+    except Exception as e:
+        print(f"[WARN] Gagal kirim pesan awal {current_id}: {e}")
+
+    # --- Lanjutkan pesan berikutnya ---
+    async for msg in client.iter_messages(source, reverse=True, offset_id=current_id):
         if not is_running:
             print("⏸️ Forward dihentikan.")
             break
@@ -103,7 +115,7 @@ async def main():
     target = await client.get_entity(TARGET_CHANNEL)
 
     print("=" * 60)
-    print("🚀 BOT FORWARDER (LINK START + TRUE ID) AKTIF")
+    print("🚀 BOT FORWARDER (LINK START FIXED — NO SKIP) AKTIF")
     print(f"📤 Sumber : {SOURCE_CHANNEL}")
     print(f"📥 Tujuan : {TARGET_CHANNEL}")
     print(f"▶️ Start ID : {start_from_id}")
