@@ -73,19 +73,19 @@ async def forward_sequential(client: TelegramClient, source, target):
 
     print(f"▶️ Mulai forward dari ID: {current_id}")
 
-    # --- Kirim dulu pesan start_from_id itu sendiri ---
+    # === 1️⃣ Kirim pesan pertama secara manual ===
     try:
         msg = await client.get_messages(source, ids=current_id)
         if msg and is_running:
             await client.forward_messages(entity=target, messages=msg)
             last_sent_id = msg.id
             save_progress(last_sent_id)
-            print(f"✅ Forwarded ID {msg.id}. Tunggu {interval_minutes} menit...")
+            print(f"✅ Forwarded ID {msg.id} (pesan awal). Tunggu {interval_minutes} menit...")
             await asyncio.sleep(interval_minutes * 60)
     except Exception as e:
-        print(f"[WARN] Gagal kirim pesan awal {current_id}: {e}")
+        print(f"[WARN] Gagal kirim pesan pertama {current_id}: {e}")
 
-    # --- Lanjutkan pesan berikutnya ---
+    # === 2️⃣ Lanjut pesan berikutnya ===
     async for msg in client.iter_messages(source, reverse=True, offset_id=current_id):
         if not is_running:
             print("⏸️ Forward dihentikan.")
@@ -115,19 +115,21 @@ async def main():
     target = await client.get_entity(TARGET_CHANNEL)
 
     print("=" * 60)
-    print("🚀 BOT FORWARDER (LINK START FIXED — NO SKIP) AKTIF")
+    print("🚀 BOT FORWARDER (FINAL – FIXED & FILTER /)")
     print(f"📤 Sumber : {SOURCE_CHANNEL}")
     print(f"📥 Tujuan : {TARGET_CHANNEL}")
     print(f"▶️ Start ID : {start_from_id}")
     print(f"⏱️ Interval : {interval_minutes} menit antar postingan")
     print("=" * 60)
 
-    # === Handler command ===
     @client.on(events.NewMessage(from_users=OWNER_ID))
     async def command_handler(event):
         global is_running, interval_minutes, start_from_id, last_sent_id
 
         cmd = event.raw_text.strip()
+        if not cmd.startswith("/"):
+            return  # ⛔ Abaikan pesan non-command
+
         lower_cmd = cmd.lower()
         args = lower_cmd.split()
 
