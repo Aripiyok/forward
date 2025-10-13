@@ -15,7 +15,7 @@ TARGET_CHANNEL = os.getenv("TARGET_CHANNEL")
 
 START_FROM_ID = int(os.getenv("START_FROM_ID", "0"))
 INTERVAL_MINUTES = int(os.getenv("FORWARD_INTERVAL_MINUTES", "10"))
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))  # ID akun pemilik bot
+OWNER_ID = int(os.getenv("OWNER_ID", "0"))  # ID akun pengendali bot
 
 PROGRESS_FILE = Path("progress.json")
 
@@ -25,7 +25,7 @@ interval_minutes = INTERVAL_MINUTES
 start_from_id = START_FROM_ID
 
 
-# === Fungsi simpan/baca progress ===
+# === Simpan dan baca progress ===
 def load_progress() -> int:
     if PROGRESS_FILE.exists():
         try:
@@ -40,9 +40,8 @@ def save_progress(last_id: int):
     PROGRESS_FILE.write_text(json.dumps({"last_id": last_id}), encoding="utf-8")
 
 
-# === Update file .env ===
+# === Update nilai di .env ===
 def update_env_var(key: str, value):
-    """Update variabel di file .env"""
     os.environ[key] = str(value)
     if not os.path.exists(".env"):
         return
@@ -60,7 +59,7 @@ def update_env_var(key: str, value):
         f.writelines(lines)
 
 
-# === Fungsi utama untuk forward pesan ===
+# === Fungsi forward pesan satu per satu ===
 async def forward_sequential(client: TelegramClient, source, target):
     global is_running, interval_minutes, start_from_id
 
@@ -128,16 +127,27 @@ async def main():
                 await event.reply("🛑 Bot dihentikan.")
 
         elif cmd.startswith("/setting"):
+            # /setting <menit>
             if len(args) == 2 and args[1].isdigit():
                 new_val = int(args[1])
                 interval_minutes = new_val
                 update_env_var("FORWARD_INTERVAL_MINUTES", new_val)
                 await event.reply(f"✅ Interval diubah menjadi {new_val} menit.")
+
+            # /setting start <id>
             elif len(args) == 3 and args[1] == "start" and args[2].isdigit():
                 new_start = int(args[2])
                 start_from_id = new_start
                 update_env_var("START_FROM_ID", new_start)
-                await event.reply(f"✅ START_FROM_ID diubah menjadi {new_start}.")
+
+                # Hapus progress lama biar mulai dari titik baru
+                if PROGRESS_FILE.exists():
+                    PROGRESS_FILE.unlink()
+
+                # Simpan progress baru sebagai start point
+                save_progress(start_from_id)
+
+                await event.reply(f"✅ START_FROM_ID diubah menjadi {new_start} dan progress direset.")
             else:
                 await event.reply("⚙️ Format salah.\nGunakan:\n/setting <menit>\n/setting start <id>")
 
