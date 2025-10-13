@@ -60,12 +60,11 @@ def update_env_var(key: str, value):
         f.writelines(lines)
 
 
-# === Proses forward pesan ===
+# === Proses forward ===
 async def forward_sequential(client: TelegramClient, source, target):
     global is_running, interval_minutes, start_from_id, last_sent_id
 
     last_saved = load_progress()
-    # Jika ada perubahan start
     if start_from_id != 0 and start_from_id != last_saved:
         current_id = start_from_id
         save_progress(start_from_id)
@@ -74,12 +73,11 @@ async def forward_sequential(client: TelegramClient, source, target):
 
     print(f"▶️ Mulai forward dari ID: {current_id}")
 
-    async for msg in client.iter_messages(source, reverse=True):
+    # Ambil pesan mulai dari current_id (termasuk dirinya sendiri)
+    async for msg in client.iter_messages(source, reverse=True, offset_id=current_id - 1):
         if not is_running:
             print("⏸️ Forward dihentikan.")
             break
-        if msg.id < current_id:
-            continue
         if msg.action:
             continue
         try:
@@ -105,14 +103,14 @@ async def main():
     target = await client.get_entity(TARGET_CHANNEL)
 
     print("=" * 60)
-    print("🚀 BOT FORWARDER (USER MODE + LINK START) AKTIF")
+    print("🚀 BOT FORWARDER (LINK START + TRUE ID) AKTIF")
     print(f"📤 Sumber : {SOURCE_CHANNEL}")
     print(f"📥 Tujuan : {TARGET_CHANNEL}")
     print(f"▶️ Start ID : {start_from_id}")
     print(f"⏱️ Interval : {interval_minutes} menit antar postingan")
     print("=" * 60)
 
-    # === Handler Command ===
+    # === Handler command ===
     @client.on(events.NewMessage(from_users=OWNER_ID))
     async def command_handler(event):
         global is_running, interval_minutes, start_from_id, last_sent_id
@@ -121,7 +119,6 @@ async def main():
         lower_cmd = cmd.lower()
         args = lower_cmd.split()
 
-        # === /on ===
         if lower_cmd == "/on":
             if is_running:
                 await event.reply("⚠️ Bot sudah berjalan.")
@@ -130,7 +127,6 @@ async def main():
                 await event.reply("✅ Bot dimulai. Forward pesan berjalan...")
                 asyncio.create_task(forward_sequential(client, source, target))
 
-        # === /off ===
         elif lower_cmd == "/off":
             if not is_running:
                 await event.reply("⚠️ Bot sudah berhenti.")
@@ -138,14 +134,12 @@ async def main():
                 is_running = False
                 await event.reply("🛑 Bot dihentikan.")
 
-        # === /setting ===
         elif lower_cmd.startswith("/setting"):
             if len(args) == 2 and args[1].isdigit():
                 new_val = int(args[1])
                 interval_minutes = new_val
                 update_env_var("FORWARD_INTERVAL_MINUTES", new_val)
                 await event.reply(f"✅ Interval diubah menjadi {new_val} menit.")
-
             elif len(args) == 3 and args[1] == "start" and args[2].isdigit():
                 new_start = int(args[2])
                 start_from_id = new_start
@@ -155,7 +149,6 @@ async def main():
             else:
                 await event.reply("⚙️ Format salah.\nGunakan:\n/setting <menit>\n/setting start <id>")
 
-        # === /status ===
         elif lower_cmd == "/status":
             status = "🟢 Aktif" if is_running else "🔴 Nonaktif"
             last_id = load_progress()
@@ -166,7 +159,6 @@ async def main():
                 f"📨 Last ID: {last_id}"
             )
 
-        # === /start <link> ===
         elif lower_cmd.startswith("/start "):
             match = re.search(r"https://t\.me/c/\d+/(\d+)", cmd)
             if match:
