@@ -12,7 +12,7 @@ load_dotenv()
 API_ID = int(os.getenv("API_ID"))
 API_HASH = os.getenv("API_HASH")
 SOURCE_CHANNEL = int(os.getenv("SOURCE_CHANNEL"))
-TARGET_CHANNEL = os.getenv("TARGET_CHANNEL")
+TARGET_CHANNEL = int(os.getenv("TARGET_CHANNEL"))   # <-- FIX WAJIB
 
 START_FROM_ID = int(os.getenv("START_FROM_ID", "0"))
 INTERVAL_MINUTES = int(os.getenv("FORWARD_INTERVAL_MINUTES", "10"))
